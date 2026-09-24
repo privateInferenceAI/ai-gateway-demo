@@ -1,0 +1,37 @@
+# LiteLLM gateway config — reference build ("what the bank probably has")
+# One front door, two model tiers behind it:
+#   company-ai     -> LOCAL model (restricted data never leaves the building)
+#   company-claude -> Claude via AWS Bedrock (the government-standard Claude path)
+# Consumers only ever see the aliases; keys carry their own model ACLs (mint-keys.sh).
+
+model_list:
+  # --- Local tier: anything marked restricted/confidential stays on-prem ---
+  - model_name: company-ai
+    litellm_params:
+      model: openai/qwen3-32b            # OpenAI-compatible local server (llama.cpp)
+      api_base: os.environ/LLAMA_API_BASE   # e.g. http://llamacpp:8080/v1 (shared ai-net) or your own
+      api_key: os.environ/LLAMA_API_KEY
+
+  # --- Approved cloud tier: Claude via AWS Bedrock ---
+  # Bedrock is the government-standard path (FedRAMP-authorized; Anthropic's
+  # government offerings ride AWS). Auth uses the boto3 credential chain:
+  # AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY in .env, or an attached instance role.
+  - model_name: company-claude
+    litellm_params:
+      model: bedrock/anthropic.claude-sonnet-5
+      # ^ VERIFY the current Bedrock model ID in your target region — IDs are
+      # region-specific and versioned (e.g. anthropic.claude-sonnet-5-YYYYMMDD-v1:0).
+      # aws_region_name: us-east-1
+      # Direct Anthropic API fallback (one-line swap, if approved):
+      # model: anthropic/claude-sonnet-5
+      # api_key: os.environ/ANTHROPIC_API_KEY
+
+litellm_settings:
+  drop_params: true
+  set_verbose: false
+  # GATEWAY-LEVEL GUARDRAILS — enforced for every consumer (see guardrails/callback.py)
+  callbacks: guardrails.callback.BankGuardrail
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL

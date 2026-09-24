@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    # freeze: postgres@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
+    container_name: gw-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - demo-net
+
+  litellm:
+    image: ghcr.io/berriai/litellm@sha256:af806882b7a6ced41658db5b6a7e98ed7b9b51d03b935e0417bf1c8552d688af
+    container_name: gw-litellm
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      USE_PRISMA_MIGRATE: "true"
+    # LOCK-DOWN BY DEFAULT: localhost only. In production, terminate TLS at an ALB
+    # (or nginx) in front and keep this private — see terraform/ and README.
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - ./litellm/config.yaml:/app/config.yaml:ro
+      - ./guardrails:/app/guardrails:ro
+    command: --config /app/config.yaml --port 4000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+    networks:
+      - demo-net
+      - ai-net  # optional: join the ai-stack network to reach a running llamacpp
+
+networks:
+  demo-net:
+  ai-net:
+    external: true   # comment out on a standalone box (and run your own llamacpp)

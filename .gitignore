@@ -1,0 +1,10 @@
+.env
+*.pem
+*.key
+postgres-data/
+__pycache__/
+terraform/.terraform/
+terraform/*.tfstate*
+terraform/*.tfvars
+.DS_Store
+Thumbs.db
